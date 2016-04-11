@@ -49,13 +49,17 @@ public class EarlParser {
       parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true);
       parser.setInput(inputStream, null);
       while (parser.next() != XmlPullParser.END_DOCUMENT) {
-        if (parser.getEventType() == XmlPullParser.START_TAG)
+        if (parser.getEventType() == XmlPullParser.START_TAG) {
+
           switch (parser.getName()) {
             case RSSFeed.XML_TAG:
               return RSSFeed.read(parser, maxItems);
+            case RSSFeed.XML_TAG_v1:
+              return RSSFeed.read_v1(parser, maxItems);
             case AtomFeed.XML_TAG:
               return AtomFeed.read(parser, maxItems);
           }
+        }
       }
     } finally {
       inputStream.close();

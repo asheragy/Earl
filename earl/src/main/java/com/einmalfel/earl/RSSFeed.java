@@ -19,6 +19,13 @@ import java.util.Map;
 public class RSSFeed implements Feed {
   static final String XML_TAG = "channel";
 
+  //RSS 1.0 tags
+  static final String XML_TAG_v1 = "RDF";
+  static final String XML_TAG_CHANNEL = "channel";
+  static final String XML_TAG_TITLE = "title";
+  static final String XML_TAG_DESCRIPTION = "description";
+  static final String XML_TAG_LINK = "link";
+
   private static final String TAG = "Earl.RSSFeed";
 
   private enum ST {
@@ -87,8 +94,7 @@ public class RSSFeed implements Feed {
     ItunesFeed.ItunesFeedBuilder itunesBuilder = null;
     MediaCommon.MediaCommonBuilder mediaBuilder = null;
 
-    while (parser.nextTag() == XmlPullParser.START_TAG && (maxItems < 1 || items
-        .size() < maxItems)) {
+    while (parser.nextTag() == XmlPullParser.START_TAG && (maxItems < 1 || items.size() < maxItems)) {
       String namespace = parser.getNamespace();
       if (XmlPullParser.NO_NAMESPACE.equalsIgnoreCase(namespace)) {
         String tagName = parser.getName();
@@ -174,6 +180,95 @@ public class RSSFeed implements Feed {
         items,
         itunesBuilder == null ? null : itunesBuilder.build(),
         mediaBuilder == null ? null : mediaBuilder.build());
+  }
+
+
+  @NonNull
+  static RSSFeed read_v1(@NonNull XmlPullParser parser, int maxItems) throws IOException, XmlPullParserException {
+
+    parser.require(XmlPullParser.START_TAG, null, XML_TAG_v1);
+
+    Map<ST, String> map = new HashMap<>(5);
+    List<RSSItem> items = new LinkedList<>();
+    List<RSSCategory> categories = new LinkedList<>();
+    List<Integer> skipHours = new LinkedList<>();
+    List<String> skipDays = new LinkedList<>();
+
+    while (parser.nextTag() == XmlPullParser.START_TAG && (maxItems < 1 || items.size() < maxItems)) {
+      String namespace = parser.getNamespace();
+      if (Utils.RSSv1_NAMESPACE.equalsIgnoreCase(namespace)) {
+        String tagName = parser.getName();
+        switch (tagName) {
+
+          case XML_TAG_CHANNEL:
+            while (parser.nextTag() == XmlPullParser.START_TAG) {
+              tagName = parser.getName();
+              if(Utils.RSSv1_NAMESPACE.equalsIgnoreCase(parser.getNamespace())) {
+                switch (tagName) {
+                  case XML_TAG_TITLE:
+                  case XML_TAG_DESCRIPTION:
+                  case XML_TAG_LINK:
+                    try {
+                      map.put(ST.valueOf(tagName), parser.nextText());
+                    } catch (IllegalArgumentException ignored) {
+                      Log.w(TAG, "Unknown RSS item tag " + tagName);
+                      Utils.skipTag(parser);
+                    }
+                    break;
+                  default:
+                    Utils.skipTag(parser);
+                    //Do nothing
+                }
+              } else
+                Utils.skipTag(parser);
+
+              Utils.finishTag(parser);
+            }
+            break;
+
+          case RSSItem.XML_TAG:
+            items.add(RSSItem.read_v1(parser));
+            break;
+
+          default:
+            try {
+              map.put(ST.valueOf(tagName), parser.nextText());
+            } catch (IllegalArgumentException ignored) {
+              Log.w(TAG, "Unknown RSS feed tag " + tagName);
+              Utils.skipTag(parser);
+            }
+        }
+      } else {
+        Log.w(TAG, "Unknown RSS feed extension " + parser.getNamespace());
+        Utils.skipTag(parser);
+      }
+      Utils.finishTag(parser);
+    }
+
+    return new RSSFeed(
+            Utils.nonNullString(map.remove(ST.title)),
+            Utils.nonNullUrl(map.remove(ST.link)),
+            Utils.nonNullString(map.remove(ST.description)),
+            map.remove(ST.language),
+            map.remove(ST.copyright),
+            map.remove(ST.managingEditor),
+            map.remove(ST.webMaster),
+            map.containsKey(ST.pubDate) ? Utils.parseRFC822Date(map.remove(ST.pubDate)) : null,
+            map.containsKey(ST.lastBuildDate) ? Utils
+                    .parseRFC822Date(map.remove(ST.lastBuildDate)) : null,
+            categories,
+            map.remove(ST.generator),
+            map.containsKey(ST.docs) ? Utils.tryParseUrl(map.remove(ST.docs)) : null,
+            null,
+            map.containsKey(ST.ttl) ? Utils.tryParseInt(map.remove(ST.ttl)) : null,
+            map.remove(ST.rating),
+            null, //image
+            null, //textInput
+            skipHours,
+            skipDays,
+            items,
+            null,
+            null);
   }
 
   public RSSFeed(@NonNull String title, @NonNull URL link, @NonNull String description,

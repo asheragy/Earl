@@ -20,7 +20,7 @@ public class RSSItem implements Item {
   static final String XML_TAG = "item";
   private static final String TAG = "Earl.RSSItem";
 
-  private enum ST {title, link, description, author, comments, pubDate}
+  private enum ST {title, link, description, author, comments, pubDate, date, creator}
 
   @Nullable
   public final String title;
@@ -115,6 +115,52 @@ public class RSSItem implements Item {
         source,
         itunesBuilder == null ? null : itunesBuilder.build(),
         mediaBuilder == null ? null : mediaBuilder.build());
+  }
+
+
+  @NonNull
+  static RSSItem read_v1(@NonNull XmlPullParser parser) throws IOException, XmlPullParserException {
+
+    parser.require(XmlPullParser.START_TAG, Utils.RSSv1_NAMESPACE, XML_TAG);
+    Map<ST, String> map = new HashMap<>(5);
+    List<RSSEnclosure> enclosures = new LinkedList<>();
+    List<RSSCategory> categories = new LinkedList<>();
+
+    while (parser.nextTag() == XmlPullParser.START_TAG) {
+
+      String tagName = parser.getName();
+      switch (tagName) {
+
+        case "format":
+        case "source":
+          Utils.skipTag(parser);
+          break;
+
+        default:
+          try {
+            map.put(ST.valueOf(tagName), parser.nextText());
+          } catch (IllegalArgumentException ignored) {
+            Log.w(TAG, "Unknown RSS item tag " + tagName);
+            Utils.skipTag(parser);
+          }
+      }
+
+      Utils.finishTag(parser);
+    }
+
+    return new RSSItem(
+            map.remove(ST.title),
+            map.containsKey(ST.link) ? Utils.tryParseUrl(map.remove(ST.link)) : null,
+            map.remove(ST.description),
+            map.remove(ST.creator),
+            categories,
+            map.containsKey(ST.comments) ? Utils.tryParseUrl(map.remove(ST.comments)) : null,
+            enclosures,
+            null, //guid
+            map.containsKey(ST.date) ? Utils.parseRFC3339Date(map.remove(ST.date)) : null,
+            null, //source
+            null,
+            null);
   }
 
   public RSSItem(@Nullable String title, @Nullable URL link, @Nullable String description,
